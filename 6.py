@@ -7,19 +7,51 @@ RIGHT = 1
 DOWN = 2
 LEFT = 3
 
-def read_input()->list[str]:
+
+def read_input() -> list[str]:
     with open(f"input/{PUZZLE_NUMBER}.txt", "r") as file:
         return file.read().splitlines()
 
 
+class Cell:
+    def __init__(self, data: str):
+        self.__data = data
+        self.__path = []
+
+    @property
+    def data(self):
+        return self.__data
+
+    @data.setter
+    def data(self, value):
+        self.__data = value
+
+    def add_path(self, direction: int):
+        if direction not in self.__path:
+            self.__path.append(direction)
+
+    def is_looping_path(self, direction: int):
+        return (direction + 1) % 4 in self.__path
+
+    def __str__(self):
+        return f"data: {self.__data}, path: {self.__path}"
+
+
 class Map:
     def __init__(self, data: list[str]):
-        self.__map: list[list[str]] = [list(row) for row in data]
+        self.__build_map(data)
+        #self.__map: list[list[str]] = [list(row) for row in data]
+        self.__map = self.__build_map(data)
         self.__obstacles: list[list[int]] = self.__find_obstacles(data)
         self.__start: tuple[int, int] = self.__find_start(data)
         self.__width = len(data[0])
         self.__height = len(data)
         print(self.__start)
+
+    @staticmethod
+    def __build_map(data: list[str]):
+        return [[Cell(x) for x in list(row)] for row in data]
+
 
     @staticmethod
     def __find_obstacles(data) -> list[list[int]]:
@@ -39,22 +71,21 @@ class Map:
         return self.__start
 
     def mark_map(self, location: tuple[int, int]) -> None:
-        self.__map[location[1]][location[0]] = "X"
+        self.__map[location[1]][location[0]].data = "X"
 
     def is_obstacle(self, position: tuple[int, int]) -> bool:
         return list(position) in self.__obstacles
 
-    def off_the_map(self, position)->bool:
+    def off_the_map(self, position) -> bool:
         return not (0 <= position[0] < self.__width and 0 <= position[1] < self.__height)
 
     @property
     def total_positions(self):
-        return sum(row.count("X") for row in self.__map)
+        return sum([x.data for x in row].count("X") for row in self.__map)
 
     def __str__(self):
-        return "\n".join("".join(x for x in row) for row in self.__map)
-
-
+        return "lol"
+        #return "\n".join("".join(x for x in row) for row in self.__map)
 
 
 class Guard:
@@ -87,8 +118,6 @@ class Guard:
             self.__direction = (self.__direction + 1) % 4
 
 
-
-
 def main():
     data = """....#.....
 .........#
@@ -100,7 +129,7 @@ def main():
 ........#.
 #.........
 ......#...""".splitlines()
-    data=read_input()
+    # data = read_input()
     route_map = Map(data)
     guard = Guard(route_map)
     while guard.exists:
