@@ -17,6 +17,15 @@ class Cell:
     def __init__(self, data: str):
         self.__data = data
         self.__path = []
+        self.__start = False
+
+    @property
+    def start(self):
+        return self.__start
+
+    @start.setter
+    def start(self, value):
+        self.__start = value
 
     @property
     def data(self):
@@ -38,20 +47,41 @@ class Cell:
         return direction in self.__path
 
     def __str__(self):
-        return f"data: {self.__data}, path: {self.__path}"
+        if self.__start:
+            return "^"
+        if self.__data == "#":
+            return self.__data
+        if 5 in self.__path:
+            return ("O")
+        if any(x in self.__path for x in [0, 2]) and any(x in self.__path for x in [1, 3]):
+            return "+"
+        if any(x in self.__path for x in [0, 2]):
+            return "|"
+        if any(x in self.__path for x in [1, 3]):
+            return "-"
+        else:
+            return self.__data
 
 
 class Map:
     def __init__(self, data: list[str]):
-        self.__build_map(data)
-        # self.__map: list[list[str]] = [list(row) for row in data]
         self.__map = self.__build_map(data)
+        self.__original_data = data
         self.__obstacles: list[list[int]] = self.__find_obstacles(data)
         self.__start: tuple[int, int] = self.__find_start(data)
+        self.__map[self.__start[1]][self.__start[0]].start = True
         self.__width = len(data[0])
         self.__height = len(data)
         self.__extra_obstacles = 0
-        print(self.__start)
+        self.__added_obstacle = ()
+
+    def reset_map(self):
+        self.__map = self.__build_map(self.__original_data)
+        self.__obstacles = self.__find_obstacles(self.__original_data)
+
+    @property
+    def added_obstacle(self):
+        return self.__added_obstacle
 
     @staticmethod
     def __build_map(data: list[str]):
@@ -74,12 +104,12 @@ class Map:
     def start_location(self) -> tuple[int, int]:
         return self.__start
 
-    def mark_map(self, location: tuple[int, int], direction:int, data_type:str="guard") -> None:
+    def mark_map(self, location: tuple[int, int], direction: int, data_type: str = "guard") -> None:
         if data_type == "guard":
             self.__map[location[1]][location[0]].data = "X"
             self.__map[location[1]][location[0]].add_path(direction)
         else:
-            if 5 not in self.__map[location[1]][location[0]].path:
+            if 5 not in self.__map[location[1]][location[0]].path and not self.is_obstacle(location):
                 self.__map[location[1]][location[0]].add_path(5)
                 self.__extra_obstacles += 1
             else:
@@ -91,16 +121,17 @@ class Map:
     def off_the_map(self, position) -> bool:
         return not (0 <= position[0] < self.__width and 0 <= position[1] < self.__height)
 
+    def add_obstacle(self, position):
+        self.__obstacles.append(list(position))
+        self.__map[position[1]][position[0]].data = "#"
+        self.__added_obstacle = position
+
     @property
     def total_positions(self):
         return sum([x.data for x in row].count("X") for row in self.__map)
 
     def is_looping_path(self, position: tuple[int, int], direction: int):
         return self.__map[position[1]][position[0]].is_looping_path(direction)
-
-    @property
-    def extra_obstacles(self):
-        return self.__extra_obstacles
 
     def __str__(self):
         return "\n".join("".join(str(x) for x in row) for row in self.__map)
@@ -112,79 +143,97 @@ class Guard:
         self.__map: Map = route_map
         self.__direction: int = UP
         self.__exists: bool = True
+        self.__visited = []
+        self.__extra_obstacles = []
 
-
+    def reset_to_start(self):
+        self.__position = self.__map.start_location
+        self.__direction = UP
+        self.__visited = []
+        self.__exists = True
 
     @property
     def exists(self) -> bool:
         return self.__exists
 
-    def move(self):
-        #print(f"move guard {self.__position}, Direction: {self.__direction}")
-        self.__map.mark_map(self.__position, self.__direction)
-        position_in_front = self.__position
-        if self.__direction == UP:
-            position_in_front = (self.__position[0], self.__position[1] - 1)
-        elif self.__direction == RIGHT:
-            position_in_front = (self.__position[0] + 1, self.__position[1])
-        elif self.__direction == DOWN:
-            position_in_front = (self.__position[0], self.__position[1] + 1)
-        elif self.__direction == LEFT:
-            position_in_front = (self.__position[0] - 1, self.__position[1])
+    @property
+    def visited(self):
+        return self.__visited
 
+    @property
+    def extra_obstacles(self):
+        return self.__extra_obstacles
+
+    def move(self):
+        self.__visited.append((self.__position, self.__direction))
+        self.__map.mark_map(self.__position, self.__direction)
+        position_in_front = self.get_position_in_front()
         if not self.__map.is_obstacle(position_in_front):
-            trace = Trace(self.__map, self.__position, self.__direction)
-            if trace.enters_loop():
-                self.__map.mark_map(position_in_front, self.__direction, data_type="obstacle")
             self.__position = position_in_front
             if self.__map.off_the_map(self.__position):
                 self.__exists = False
         else:
             self.__direction = (self.__direction + 1) % 4
+        if (self.__position, self.__direction) in self.__visited:
+            if self.__map.added_obstacle not in self.__extra_obstacles:
+                self.__extra_obstacles.append(self.__map.added_obstacle)
+            self.__exists = False
+            print("LOOP!")
+
+    def get_position_in_front(self):
+        if self.__direction == UP:
+            return self.__position[0], self.__position[1] - 1
+        elif self.__direction == RIGHT:
+            return self.__position[0] + 1, self.__position[1]
+        elif self.__direction == DOWN:
+            return self.__position[0], self.__position[1] + 1
+        elif self.__direction == LEFT:
+            return self.__position[0] - 1, self.__position[1]
 
 
 class Trace:
-    def __init__(self, route_map:Map, start_position: tuple[int,int], start_direction: int):
+    def __init__(self, route_map: Map, start_position: tuple[int, int], start_direction: int):
         self.__map = route_map
         self.__position = start_position
         self.__start_position = start_position
         self.__direction = start_direction
+        self.__proposed_obstacle = self.get_position_in_front()
 
+    def enters_loop(self) -> bool:
 
-    def enters_loop(self)->bool:
-        visited =[(self.__position, self.__direction)]
-        self.__direction = (self.__direction+1)%4
+        visited = [(self.__position, self.__direction)]
+        self.__direction = (self.__direction + 1) % 4
         while True:
             visited.append((self.__position, self.__direction))
-            #print(f"Trace: {self.__position}, {self.__direction}")
-            position_in_front = self.__position
-            if self.__direction == UP:
-                position_in_front = (self.__position[0], self.__position[1] - 1)
-            elif self.__direction == RIGHT:
-                position_in_front = (self.__position[0] + 1, self.__position[1])
-            elif self.__direction == DOWN:
-                position_in_front = (self.__position[0], self.__position[1] + 1)
-            elif self.__direction == LEFT:
-                position_in_front = (self.__position[0] - 1, self.__position[1])
-            if not self.__map.is_obstacle(position_in_front):
+            # print(f"Trace: {self.__position}, {self.__direction}")
+            position_in_front = self.get_position_in_front()
+            if not (self.__map.is_obstacle(position_in_front) or position_in_front == self.__proposed_obstacle):
                 self.__position = position_in_front
                 if self.__map.off_the_map(self.__position):
                     return False
             else:
                 self.__direction = (self.__direction + 1) % 4
 
-            if (self.__position, self.__direction) in visited or self.__map.is_looping_path(self.__position, self.__direction):
-                print(f"Loop created: {self.__start_position}")
+            if (self.__position, self.__direction) in visited or self.__map.is_looping_path(self.__position,
+                                                                                            self.__direction):
                 return True
 
-
+    def get_position_in_front(self):
+        if self.__direction == UP:
+            return self.__position[0], self.__position[1] - 1
+        elif self.__direction == RIGHT:
+            return self.__position[0] + 1, self.__position[1]
+        elif self.__direction == DOWN:
+            return self.__position[0], self.__position[1] + 1
+        elif self.__direction == LEFT:
+            return self.__position[0] - 1, self.__position[1]
 
 
 def main():
     data = """....#.....
 .........#
 ..........
-..#......#
+..#.......
 .......#..
 ..........
 .#..^.....
@@ -197,8 +246,22 @@ def main():
     while guard.exists:
         guard.move()
     print(route_map)
+    print()
+    path = set([x[0] for x in guard.visited])
+
+    for location in path:
+        route_map.reset_map()
+        route_map.add_obstacle(location)
+        guard.reset_to_start()
+
+        print(f"adding obstacle {location}")
+
+        while guard.exists:
+            guard.move()
+
     print(route_map.total_positions)
-    print(route_map.extra_obstacles)
+
+    print(len(guard.extra_obstacles))
 
 
 if __name__ == "__main__":
