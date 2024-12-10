@@ -1,4 +1,5 @@
 import re
+from time import perf_counter
 
 PUZZLE_NUMBER: int = 6
 
@@ -130,9 +131,6 @@ class Map:
     def total_positions(self):
         return sum([x.data for x in row].count("X") for row in self.__map)
 
-    def is_looping_path(self, position: tuple[int, int], direction: int):
-        return self.__map[position[1]][position[0]].is_looping_path(direction)
-
     def __str__(self):
         return "\n".join("".join(str(x) for x in row) for row in self.__map)
 
@@ -178,45 +176,6 @@ class Guard:
             if self.__map.added_obstacle not in self.__extra_obstacles:
                 self.__extra_obstacles.append(self.__map.added_obstacle)
             self.__exists = False
-            print("LOOP!")
-
-    def get_position_in_front(self):
-        if self.__direction == UP:
-            return self.__position[0], self.__position[1] - 1
-        elif self.__direction == RIGHT:
-            return self.__position[0] + 1, self.__position[1]
-        elif self.__direction == DOWN:
-            return self.__position[0], self.__position[1] + 1
-        elif self.__direction == LEFT:
-            return self.__position[0] - 1, self.__position[1]
-
-
-class Trace:
-    def __init__(self, route_map: Map, start_position: tuple[int, int], start_direction: int):
-        self.__map = route_map
-        self.__position = start_position
-        self.__start_position = start_position
-        self.__direction = start_direction
-        self.__proposed_obstacle = self.get_position_in_front()
-
-    def enters_loop(self) -> bool:
-
-        visited = [(self.__position, self.__direction)]
-        self.__direction = (self.__direction + 1) % 4
-        while True:
-            visited.append((self.__position, self.__direction))
-            # print(f"Trace: {self.__position}, {self.__direction}")
-            position_in_front = self.get_position_in_front()
-            if not (self.__map.is_obstacle(position_in_front) or position_in_front == self.__proposed_obstacle):
-                self.__position = position_in_front
-                if self.__map.off_the_map(self.__position):
-                    return False
-            else:
-                self.__direction = (self.__direction + 1) % 4
-
-            if (self.__position, self.__direction) in visited or self.__map.is_looping_path(self.__position,
-                                                                                            self.__direction):
-                return True
 
     def get_position_in_front(self):
         if self.__direction == UP:
@@ -240,28 +199,28 @@ def main():
 ........#.
 #.........
 ......#...""".splitlines()
+    start = perf_counter()
     data = read_input()
     route_map = Map(data)
     guard = Guard(route_map)
     while guard.exists:
         guard.move()
-    print(route_map)
+    print(f"Part 1: {route_map.total_positions}")
+    part1_time = perf_counter()
+    print(f"Total time for part 1: {part1_time - start}")
     print()
-    path = set([x[0] for x in guard.visited])
 
-    for location in path:
+    path = set([x[0] for x in guard.visited])
+    for i, location in enumerate(path):
         route_map.reset_map()
         route_map.add_obstacle(location)
         guard.reset_to_start()
-
-        print(f"adding obstacle {location}")
-
         while guard.exists:
             guard.move()
 
-    print(route_map.total_positions)
-
-    print(len(guard.extra_obstacles))
+    print(f"Part 2: {len(guard.extra_obstacles)}")
+    part2_time = perf_counter()
+    print(f"Total time for part 1: {part2_time - part1_time}")
 
 
 if __name__ == "__main__":
